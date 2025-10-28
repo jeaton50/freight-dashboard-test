@@ -1551,6 +1551,7 @@ function App() {
           </p>
 
           <textarea
+            dir="ltr"
             value={bulkAddModal.items}
             onChange={(e) => setBulkAddModal({ ...bulkAddModal, items: e.target.value })}
             placeholder="Type here..."
@@ -1568,6 +1569,7 @@ function App() {
               lineHeight: 1.4,
               direction: 'ltr',
               textAlign: 'left',
+              unicodeBidi: 'embed',
             }}
             autoFocus
           />
