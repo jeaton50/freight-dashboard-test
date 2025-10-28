@@ -1566,6 +1566,8 @@ function App() {
               boxSizing: 'border-box',
               resize: 'vertical',
               lineHeight: 1.4,
+              direction: 'ltr',
+              textAlign: 'left',
             }}
             autoFocus
           />
