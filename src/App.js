@@ -7,11 +7,10 @@ import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from './firebase';
 import PasswordLogin from './PasswordLogin';
-import EnhancedAnalytics from './Analytics';
 import './App.css';
 
 // ============================================
-// DEFAULTS (bootstrap Firestore config.)
+// DEFAULTS (bootstrap Firestore config)
 // ============================================
 const DEFAULT_COMPANIES = [
   'COWBOYS', 'CRANE', 'FLORIDA FREIGHT', 'KOL', 'PHOENIX FREIGHT',
@@ -51,13 +50,6 @@ const DEFAULT_CITIES = [
   'Kansas City', 'Mesa', 'Atlanta', 'Omaha', 'Colorado Springs',
   'Raleigh', 'Miami', 'Long Beach', 'Virginia Beach', 'Oakland',
   'Minneapolis', 'Tulsa', 'Tampa', 'Arlington', 'New Orleans'
-];
-
-// 2-letter U.S. states/territories for autocomplete; editable via Bulk Add too.
-const DEFAULT_STATES = [
-  'AL','AK','AZ','AR','CA','CO','CT','DC','DE','FL','GA','HI','IA','ID','IL','IN','KS','KY','LA','MA','MD',
-  'ME','MI','MN','MO','MS','MT','NC','ND','NE','NH','NJ','NM','NV','NY','OH','OK','OR','PA','PR','RI','SC',
-  'SD','TN','TX','UT','VA','VI','VT','WA','WI','WV','WY'
 ];
 
 const SHIP_METHODS = ['Round Trip', 'One Way', 'Daily rate','SWA Last Mile - Round Trip','FAIR Last Mile - Round Trip','SWA Last Mile - One Way','FAIR Last Mile - One Way',];
@@ -138,10 +130,12 @@ function App() {
   const [locations, setLocations] = useState(DEFAULT_LOCATIONS);
   const [agents, setAgents] = useState(DEFAULT_AGENTS);
   const [cities, setCities] = useState(DEFAULT_CITIES);
-  const [states, setStates] = useState(DEFAULT_STATES);
-  const [clients, setClients] = useState([]);
-  const [bulkAddModal, setBulkAddModal] = useState({ open: false, type: '', items: '' });
-  const [singleAddModal, setSingleAddModal] = useState({ open: false, type: '', value: '' });
+
+  const [newCompany, setNewCompany] = useState('');
+  const [newLocation, setNewLocation] = useState('');
+  const [newAgent, setNewAgent] = useState('');
+  const [newCity, setNewCity] = useState('');
+
   const [shipments, setShipments] = useState([]);
 
   const [editingCell, setEditingCell] = useState(null);
@@ -152,23 +146,14 @@ function App() {
   const [dropdownRect, setDropdownRect] = useState(null);
   const [lastSaved, setLastSaved] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [showBulkOptions, setShowBulkOptions] = useState(false);
-  const fileInputRef = useRef(null);
-  const jsonFileInputRef = useRef(null);
-  const jsonClientsInputRef = useRef(null);
 
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-  const [statusEnabled, setStatusEnabled] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef(null);
 
   const costPerCompanyRef = useRef(null);
-  const clientStatsRef = useRef(null);
-  const agentStatsRef = useRef(null);
   const shipmentCountRef = useRef(null);
   const revenueDistRef = useRef(null);
   const cityStatsRef = useRef(null);
-  const stateStatsRef = useRef(null);
 
   // Authentication check
   useEffect(() => {
@@ -200,8 +185,6 @@ function App() {
           locations: DEFAULT_LOCATIONS,
           agents: DEFAULT_AGENTS,
           cities: DEFAULT_CITIES,
-          states: DEFAULT_STATES,
-          clients: [],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
@@ -212,8 +195,6 @@ function App() {
         if (!Array.isArray(data.locations)) payload.locations = DEFAULT_LOCATIONS;
         if (!Array.isArray(data.agents)) payload.agents = DEFAULT_AGENTS;
         if (!Array.isArray(data.cities)) payload.cities = DEFAULT_CITIES;
-        if (!Array.isArray(data.states)) payload.states = DEFAULT_STATES;
-        if (!Array.isArray(data.clients)) payload.clients = [];
         if (Object.keys(payload).length) {
           payload.updatedAt = new Date().toISOString();
           await setDoc(cfgRef, payload, { merge: true });
@@ -228,38 +209,34 @@ function App() {
         setLocations(Array.isArray(data.locations) && data.locations.length ? data.locations : DEFAULT_LOCATIONS);
         setAgents(Array.isArray(data.agents) && data.agents.length ? data.agents : DEFAULT_AGENTS);
         setCities(Array.isArray(data.cities) && data.cities.length ? data.cities : DEFAULT_CITIES);
-        setStates(Array.isArray(data.states) && data.states.length ? data.states : DEFAULT_STATES);
-        setClients(Array.isArray(data.clients) ? data.clients : []);
       } else {
         setCompanies(DEFAULT_COMPANIES);
         setLocations(DEFAULT_LOCATIONS);
         setAgents(DEFAULT_AGENTS);
         setCities(DEFAULT_CITIES);
-        setStates(DEFAULT_STATES);
-        setClients([]);
       }
     });
 
     return () => unsub();
   }, []);
 
-  const buildDefaultShipment = () => ({
-    id: Date.now(),
-    refNum: '',
-    client: '',
-    shipDate: '',
-    returnDate: '',
-    location: locations?.[0] || '',
-    returnLocation: '',
-    city: '',
-    state: '',
-    company: companies?.[0] || '',
-    shipMethod: SHIP_METHODS[0],
-    vehicleType: VEHICLE_TYPES?.[0] || '',
-    shippingCharge: 0,
-    po: '',
-    agent: agents?.[0] || '',
-  });
+  // Helper to build a default row
+const buildDefaultShipment = () => ({
+  id: Date.now(),
+  refNum: '',
+  shipDate: '',
+  returnDate: '',
+  location: locations?.[0] || '',
+  returnLocation: '',
+  city: '',              // <-- ADD THIS
+  company: companies?.[0] || '',
+  shipMethod: SHIP_METHODS[0],
+  vehicleType: VEHICLE_TYPES?.[0] || '', // if you have it
+  shippingCharge: 0,
+  po: '',
+  agent: agents?.[0] || '',
+});
+
 
   useEffect(() => {
     const initializeMonths = async () => {
@@ -321,25 +298,6 @@ function App() {
 
   useEffect(() => {
     if (!showDropdown) return;
-    const computeDropdownPosition = () => {
-      if (!inputRef.current) return;
-      const rect = inputRef.current.getBoundingClientRect();
-      const vh = window.innerHeight;
-      const maxHeight = 400;
-      const padding = 6;
-
-      const spaceBelow = vh - rect.bottom - padding;
-      const spaceAbove = rect.top - padding;
-      const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
-      const height = Math.min(openUp ? spaceAbove - padding : spaceBelow - padding, maxHeight);
-
-      setDropdownRect({
-        top: openUp ? rect.top - height - 4 : rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
-        height: Math.max(180, height),
-      });
-    };
     computeDropdownPosition();
     const onScrollResize = () => computeDropdownPosition();
     window.addEventListener('scroll', onScrollResize, true);
@@ -409,6 +367,26 @@ function App() {
     }
   };
 
+  const computeDropdownPosition = () => {
+    if (!inputRef.current) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const maxHeight = 400;
+    const padding = 6;
+
+    const spaceBelow = vh - rect.bottom - padding;
+    const spaceAbove = rect.top - padding;
+    const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+    const height = Math.min(openUp ? spaceAbove - padding : spaceBelow - padding, maxHeight);
+
+    setDropdownRect({
+      top: openUp ? rect.top - height - 4 : rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      height: Math.max(180, height),
+    });
+  };
+
   const handleCellClick = (rowIndex, field) => {
     if (isYTD) return;
     if (!shipments[rowIndex]) return;
@@ -419,27 +397,27 @@ function App() {
     if (field === 'company') {
       setFilteredOptions(companies);
       setShowDropdown(true);
+      setTimeout(computeDropdownPosition, 0);
     } else if (field === 'agent') {
       setFilteredOptions(agents);
       setShowDropdown(true);
+      setTimeout(computeDropdownPosition, 0);
     } else if (field === 'location' || field === 'returnLocation') {
       setFilteredOptions(locations);
       setShowDropdown(true);
+      setTimeout(computeDropdownPosition, 0);
     } else if (field === 'city') {
       setFilteredOptions(cities);
       setShowDropdown(true);
-    } else if (field === 'state') {
-      setFilteredOptions(states);
-      setShowDropdown(true);
-    } else if (field === 'client') {
-      setFilteredOptions(clients);
-      setShowDropdown(true);
+      setTimeout(computeDropdownPosition, 0);
     } else if (field === 'shipMethod') {
       setFilteredOptions(SHIP_METHODS);
       setShowDropdown(true);
+      setTimeout(computeDropdownPosition, 0);
     } else if (field === 'vehicleType') {
       setFilteredOptions(VEHICLE_TYPES);
       setShowDropdown(true);
+      setTimeout(computeDropdownPosition, 0);
     } else {
       setShowDropdown(false);
     }
@@ -452,7 +430,7 @@ function App() {
     const field = editingCell?.field;
     if (!field) return;
 
-    if (['company', 'agent', 'location', 'returnLocation', 'city', 'state', 'client', 'shipMethod', 'vehicleType'].includes(field)) {
+    if (['company', 'agent', 'location', 'returnLocation', 'city', 'shipMethod', 'vehicleType'].includes(field)) {
       const options =
         field === 'company'
           ? companies
@@ -460,10 +438,6 @@ function App() {
           ? agents
           : field === 'city'
           ? cities
-          : field === 'state'
-          ? states
-          : field === 'client'
-          ? clients
           : field === 'shipMethod'
           ? SHIP_METHODS
           : field === 'vehicleType'
@@ -471,7 +445,7 @@ function App() {
           : locations;
 
       const filtered = options.filter((option) =>
-        String(option).toLowerCase().includes(String(value).toLowerCase())
+        option.toLowerCase().includes(value.toLowerCase())
       );
       setFilteredOptions(filtered);
       setShowDropdown(filtered.length > 0);
@@ -493,17 +467,6 @@ function App() {
         if (field === 'shippingCharge') {
           const numValue = parseFloat(editValue);
           newShipments[rowIndex][field] = isNaN(numValue) ? 0 : numValue;
-        } else if (field === 'state') {
-          const usStateRE = /^[A-Za-z]{2}$/;
-          let val = (editValue || '').toString().trim();
-          if (val) {
-            val = val.toUpperCase().slice(0, 2);
-            if (!usStateRE.test(val)) {
-              // keep as-is if not two letters, but uppercase
-              // (allows future non-US states if needed)
-            }
-          }
-          newShipments[rowIndex][field] = val;
         } else {
           newShipments[rowIndex][field] = editValue;
         }
@@ -517,26 +480,15 @@ function App() {
   };
 
   const handleKeyDown = (e, rowIndex, field) => {
-    const fields = [
-      'refNum', 'client',
-      'shipDate', 'returnDate',
-      'location', 'returnLocation', 'city', 'state',
-      'company', 'shipMethod', 'vehicleType',
-      'shippingCharge', 'po', 'agent',
-    ];
+   const fields = [
+  'refNum', 'shipDate', 'returnDate',
+  'location', 'returnLocation', 'city',  // <-- ADD "city" here
+  'company', 'shipMethod', 'shippingCharge', 'po', 'agent',
+];
 
     const currentIndex = fields.indexOf(field);
 
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      setEditingCell(null);
-      setEditValue('');
-      setShowDropdown(false);
-      setDropdownRect(null);
-      return;
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
+    if (e.key === 'Enter') {
       if (showDropdown && filteredOptions.length > 0) {
         handleSelectOption(filteredOptions[0]);
       }
@@ -550,6 +502,11 @@ function App() {
       if (currentIndex < fields.length - 1) {
         setTimeout(() => handleCellClick(rowIndex, fields[currentIndex + 1]), 250);
       }
+    } else if (e.key === 'Escape') {
+      setEditingCell(null);
+      setEditValue('');
+      setShowDropdown(false);
+      setDropdownRect(null);
     }
   };
 
@@ -559,7 +516,7 @@ function App() {
         const targetRef = monthDocRef(selectedYear, editTargetMonth);
         const snap = await getDoc(targetRef);
         const existing = snap.exists() ? (snap.data().shipments || []) : [];
-        const updated = [buildDefaultShipment(), ...existing];
+        const updated = [...existing, buildDefaultShipment()];
         await setDoc(targetRef, {
           shipments: updated,
           lastModified: new Date().toISOString(),
@@ -575,11 +532,11 @@ function App() {
     }
 
     const newShipment = buildDefaultShipment();
-    const updatedShipments = [newShipment, ...shipments];
+    const updatedShipments = [...shipments, newShipment];
     setShipments(updatedShipments);
     saveToFirebase(updatedShipments);
     setTimeout(() => {
-      handleCellClick(0, 'refNum');
+      handleCellClick(updatedShipments.length - 1, 'refNum');
     }, 300);
   };
 
@@ -594,262 +551,213 @@ function App() {
     }
   };
 
-  const handleBulkAdd = async () => {
-    const lines = bulkAddModal.items
-      .split('\\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0);
-
-    if (lines.length === 0) {
-      alert('Please enter at least one item (one per line)');
-      return;
-    }
-
-    const type = bulkAddModal.type;
-    let currentList, fieldName, processor;
-
-    switch (type) {
-      case 'company':
-        currentList = companies;
-        fieldName = 'companies';
-        processor = (val) => val.toUpperCase();
-        break;
-      case 'location':
-        currentList = locations;
-        fieldName = 'locations';
-        processor = (val) => val;
-        break;
-      case 'agent':
-        currentList = agents;
-        fieldName = 'agents';
-        processor = (val) => {
-          let candidate = val.toUpperCase();
-          if (!candidate.includes('.')) {
-            const parts = candidate.split(/\\s+/).filter(Boolean);
-            if (parts.length >= 2) {
-              const firstInitial = parts[0][0];
-              const last = parts.slice(1).join('').replace(/[^A-Z]/g, '');
-              candidate = `${firstInitial}.${last}`;
-            }
-          }
-          return candidate;
-        };
-        break;
-      case 'city':
-        currentList = cities;
-        fieldName = 'cities';
-        processor = (val) => val;
-        break;
-      case 'state':
-        currentList = states;
-        fieldName = 'states';
-        processor = (val) => (val || '').toUpperCase().slice(0,2);
-        break;
-      case 'client':
-        currentList = clients;
-        fieldName = 'clients';
-        processor = (val) => val;
-        break;
-      default:
-        return;
-    }
-
-    const newItems = [];
+  const addCompanyGlobal = async () => {
+    const raw = newCompany.trim();
+    if (!raw) return;
+    
+    // Split by newlines, commas, or multiple spaces (for bulk entry)
+    const entries = raw.split(/[\n,]+|(?:\s{2,})/).map(s => s.trim()).filter(Boolean);
+    
+    const newEntries = [];
     const duplicates = [];
     
-    lines.forEach(line => {
-      const processed = processor(line);
-      const exists = currentList.some(item => 
-        String(item).toLowerCase() === String(processed).toLowerCase()
-      );
-      
+    entries.forEach(entry => {
+      const candidate = entry.toUpperCase();
+      const exists = companies.some(c => c.toUpperCase() === candidate) || 
+                     newEntries.some(c => c.toUpperCase() === candidate);
       if (exists) {
-        duplicates.push(processed);
-      } else if (!newItems.some(item => String(item).toLowerCase() === String(processed).toLowerCase())) {
-        newItems.push(processed);
+        duplicates.push(candidate);
+      } else {
+        newEntries.push(candidate);
       }
     });
 
-    if (newItems.length === 0) {
-      alert(`All items already exist!${duplicates.length > 0 ? '\\n\\nDuplicates: ' + duplicates.join(', ') : ''}`);
+    if (newEntries.length === 0) {
+      if (duplicates.length > 0) {
+        alert(`All entries already exist:\n${duplicates.join(', ')}`);
+      }
       return;
     }
 
-    const updatedList = [...currentList, ...newItems].sort((a, b) =>
-      String(a).localeCompare(String(b), undefined, { sensitivity: 'base' })
+    const next = [...companies, ...newEntries].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
     );
 
     try {
       const cfgRef = doc(db, 'freight-config', 'global');
-      await setDoc(cfgRef, { 
-        [fieldName]: updatedList, 
-        updatedAt: new Date().toISOString() 
-      }, { merge: true });
+      await setDoc(cfgRef, { companies: next, updatedAt: new Date().toISOString() }, { merge: true });
+      setNewCompany('');
       
-      setBulkAddModal({ open: false, type: '', items: '' });
-      
-      const message = `✅ Added ${newItems.length} ${type}(s) successfully!` +
-        (duplicates.length > 0 ? `\\n\\n⚠️ Skipped ${duplicates.length} duplicate(s)` : '');
+      let message = `Added ${newEntries.length} compan${newEntries.length === 1 ? 'y' : 'ies'}:\n${newEntries.join(', ')}`;
+      if (duplicates.length > 0) {
+        message += `\n\nSkipped ${duplicates.length} duplicate(s):\n${duplicates.join(', ')}`;
+      }
       alert(message);
     } catch (e) {
-      console.error(`Failed to bulk add ${type}s:`, e);
-      alert(`Failed to add ${type}s. Check your permissions/rules.`);
+      console.error('Failed to add company:', e);
+      alert('Failed to add companies. Check your permissions/rules.');
     }
   };
 
-  const handleImportCitiesJSON = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // Reset input
-    if (!file) return;
+  const addLocationGlobal = async () => {
+    const raw = newLocation.trim();
+    if (!raw) return;
+    
+    // Split by newlines, commas, or multiple spaces (for bulk entry)
+    const entries = raw.split(/[\n,]+|(?:\s{2,})/).map(s => s.trim()).filter(Boolean);
+    
+    const newEntries = [];
+    const duplicates = [];
+    
+    entries.forEach(entry => {
+      const exists = locations.some(l => l.toLowerCase() === entry.toLowerCase()) || 
+                     newEntries.some(l => l.toLowerCase() === entry.toLowerCase());
+      if (exists) {
+        duplicates.push(entry);
+      } else {
+        newEntries.push(entry);
+      }
+    });
+
+    if (newEntries.length === 0) {
+      if (duplicates.length > 0) {
+        alert(`All entries already exist:\n${duplicates.join(', ')}`);
+      }
+      return;
+    }
+
+    const next = [...locations, ...newEntries].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
 
     try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-
-      // Support different JSON formats
-      let cityList = [];
-      
-      if (Array.isArray(data)) {
-        // Format 1: Simple array ["City1", "City2", ...]
-        cityList = data.filter(item => typeof item === 'string' && item.trim());
-      } else if (data.cities && Array.isArray(data.cities)) {
-        // Format 2: Object with cities array { cities: ["City1", "City2", ...] }
-        cityList = data.cities.filter(item => typeof item === 'string' && item.trim());
-      } else if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object') {
-        // Format 3: Array of objects [{ name: "City1", state: "CA" }, ...]
-        cityList = data
-          .filter(item => item.name)
-          .map(item => item.name.trim());
-      }
-
-      if (cityList.length === 0) {
-        alert('No valid cities found in JSON file.\\n\\nSupported formats:\\n1. ["City1", "City2"]\\n2. { "cities": ["City1", "City2"] }\\n3. [{ "name": "City1" }, { "name": "City2" }]');
-        return;
-      }
-
-      // Remove duplicates and merge with existing
-      const existingLower = cities.map(c => c.toLowerCase());
-      const newCities = cityList.filter(
-        city => !existingLower.includes(city.toLowerCase())
-      );
-
-      if (newCities.length === 0) {
-        alert(`All ${cityList.length} cities from the file already exist!`);
-        return;
-      }
-
-      const confirm = window.confirm(
-        `Found ${cityList.length} cities in file.\\n${newCities.length} are new.\\n\\nMerge with existing cities?`
-      );
-
-      if (!confirm) return;
-
-      const updatedCities = [...cities, ...newCities].sort((a, b) =>
-        a.localeCompare(b, undefined, { sensitivity: 'base' })
-      );
-
-      // Save to Firebase
       const cfgRef = doc(db, 'freight-config', 'global');
-      await setDoc(cfgRef, {
-        cities: updatedCities,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-
-      alert(`✅ Successfully imported ${newCities.length} new cities!\\n\\nTotal cities: ${updatedCities.length}`);
-
-    } catch (error) {
-      console.error('JSON import failed:', error);
-      if (error instanceof SyntaxError) {
-        alert('❌ Invalid JSON file. Please check the file format.');
-      } else {
-        alert(`❌ Import failed: ${error.message}`);
+      await setDoc(cfgRef, { locations: next, updatedAt: new Date().toISOString() }, { merge: true });
+      setNewLocation('');
+      
+      let message = `Added ${newEntries.length} location${newEntries.length === 1 ? '' : 's'}:\n${newEntries.join(', ')}`;
+      if (duplicates.length > 0) {
+        message += `\n\nSkipped ${duplicates.length} duplicate(s):\n${duplicates.join(', ')}`;
       }
+      alert(message);
+    } catch (e) {
+      console.error('Failed to add location:', e);
+      alert('Failed to add locations. Check your permissions/rules.');
     }
   };
 
-  const onClickImportCitiesJSON = () => jsonFileInputRef.current?.click();
+  const addAgentGlobal = async () => {
+    const raw = newAgent.trim();
+    if (!raw) return;
+    
+    // Split by newlines, commas, or multiple spaces (for bulk entry)
+    const entries = raw.split(/[\n,]+|(?:\s{2,})/).map(s => s.trim()).filter(Boolean);
+    
+    const newEntries = [];
+    const duplicates = [];
+    
+    entries.forEach(entry => {
+      let candidate = entry.toUpperCase();
+      // Auto-format if it looks like a full name (e.g., "John Doe" -> "J.DOE")
+      if (!candidate.includes('.')) {
+        const parts = candidate.split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) {
+          const firstInitial = parts[0][0];
+          const last = parts.slice(1).join('').replace(/[^A-Z]/g, '');
+          candidate = `${firstInitial}.${last}`;
+        }
+      }
+      
+      const exists = agents.some(a => a.toUpperCase() === candidate) || 
+                     newEntries.some(a => a.toUpperCase() === candidate);
+      if (exists) {
+        duplicates.push(candidate);
+      } else {
+        newEntries.push(candidate);
+      }
+    });
 
-  const handleImportClientsJSON = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // Reset input
-    if (!file) return;
+    if (newEntries.length === 0) {
+      if (duplicates.length > 0) {
+        alert(`All entries already exist:\n${duplicates.join(', ')}`);
+      }
+      return;
+    }
+
+    const next = [...agents, ...newEntries].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
 
     try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-
-      // Support different JSON formats
-      let clientList = [];
-      
-      if (Array.isArray(data)) {
-        // Format 1: Simple array ["Client1", "Client2", ...]
-        clientList = data.filter(item => typeof item === 'string' && item.trim());
-      } else if (data.clients && Array.isArray(data.clients)) {
-        // Format 2: Object with clients array { clients: ["Client1", "Client2", ...] }
-        clientList = data.clients.filter(item => typeof item === 'string' && item.trim());
-      } else if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object') {
-        // Format 3: Array of objects [{ name: "Client1", contact: "..." }, ...]
-        clientList = data
-          .filter(item => item.name)
-          .map(item => item.name.trim());
-      }
-
-      if (clientList.length === 0) {
-        alert('No valid clients found in JSON file.\\n\\nSupported formats:\\n1. ["Client1", "Client2"]\\n2. { "clients": ["Client1", "Client2"] }\\n3. [{ "name": "Client1" }, { "name": "Client2" }]');
-        return;
-      }
-
-      // Remove duplicates and merge with existing
-      const existingLower = clients.map(c => c.toLowerCase());
-      const newClients = clientList.filter(
-        client => !existingLower.includes(client.toLowerCase())
-      );
-
-      if (newClients.length === 0) {
-        alert(`All ${clientList.length} clients from the file already exist!`);
-        return;
-      }
-
-      const confirm = window.confirm(
-        `Found ${clientList.length} clients in file.\\n${newClients.length} are new.\\n\\nMerge with existing clients?`
-      );
-
-      if (!confirm) return;
-
-      const updatedClients = [...clients, ...newClients].sort((a, b) =>
-        a.localeCompare(b, undefined, { sensitivity: 'base' })
-      );
-
-      // Save to Firebase
       const cfgRef = doc(db, 'freight-config', 'global');
-      await setDoc(cfgRef, {
-        clients: updatedClients,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-
-      alert(`✅ Successfully imported ${newClients.length} new clients!\\n\\nTotal clients: ${updatedClients.length}`);
-
-    } catch (error) {
-      console.error('JSON import failed:', error);
-      if (error instanceof SyntaxError) {
-        alert('❌ Invalid JSON file. Please check the file format.');
-      } else {
-        alert(`❌ Import failed: ${error.message}`);
+      await setDoc(cfgRef, { agents: next, updatedAt: new Date().toISOString() }, { merge: true });
+      setNewAgent('');
+      
+      let message = `Added ${newEntries.length} agent${newEntries.length === 1 ? '' : 's'}:\n${newEntries.join(', ')}`;
+      if (duplicates.length > 0) {
+        message += `\n\nSkipped ${duplicates.length} duplicate(s):\n${duplicates.join(', ')}`;
       }
+      alert(message);
+    } catch (e) {
+      console.error('Failed to add agent:', e);
+      alert('Failed to add agents. Check your permissions/rules.');
     }
   };
 
-  const onClickImportClientsJSON = () => jsonClientsInputRef.current?.click();
+  const addCityGlobal = async () => {
+    const raw = newCity.trim();
+    if (!raw) return;
+    
+    // Split by newlines, commas, or multiple spaces (for bulk entry)
+    const entries = raw.split(/[\n,]+|(?:\s{2,})/).map(s => s.trim()).filter(Boolean);
+    
+    const newEntries = [];
+    const duplicates = [];
+    
+    entries.forEach(entry => {
+      const exists = cities.some(c => c.toLowerCase() === entry.toLowerCase()) || 
+                     newEntries.some(c => c.toLowerCase() === entry.toLowerCase());
+      if (exists) {
+        duplicates.push(entry);
+      } else {
+        newEntries.push(entry);
+      }
+    });
+
+    if (newEntries.length === 0) {
+      if (duplicates.length > 0) {
+        alert(`All entries already exist:\n${duplicates.join(', ')}`);
+      }
+      return;
+    }
+
+    const next = [...cities, ...newEntries].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+
+    try {
+      const cfgRef = doc(db, 'freight-config', 'global');
+      await setDoc(cfgRef, { cities: next, updatedAt: new Date().toISOString() }, { merge: true });
+      setNewCity('');
+      
+      let message = `Added ${newEntries.length} cit${newEntries.length === 1 ? 'y' : 'ies'}:\n${newEntries.join(', ')}`;
+      if (duplicates.length > 0) {
+        message += `\n\nSkipped ${duplicates.length} duplicate(s):\n${duplicates.join(', ')}`;
+      }
+      alert(message);
+    } catch (e) {
+      console.error('Failed to add city:', e);
+      alert('Failed to add cities. Check your permissions/rules.');
+    }
+  };
 
   const excelColumns = [
     { header: 'Reference #', key: 'refNum' },
-    { header: 'Client', key: 'client' },
     { header: 'Ship Date', key: 'shipDate' },
     { header: 'Return Date', key: 'returnDate' },
     { header: 'Location', key: 'location' },
     { header: 'Return Location', key: 'returnLocation' },
     { header: 'City', key: 'city' },
-    { header: 'State', key: 'state' },
     { header: 'Company', key: 'company' },
     { header: 'Ship Method', key: 'shipMethod' },
     { header: 'Vehicle Type', key: 'vehicleType' },
@@ -861,19 +769,18 @@ function App() {
   const mapRowsForExcel = (rows) =>
     rows.map((s) => ({
       refNum: s.refNum ?? '',
-      client: s.client ?? '',
       shipDate: s.shipDate ?? '',
       returnDate: s.returnDate ?? '',
       location: s.location ?? '',
       returnLocation: s.returnLocation ?? '',
-      city: s.city ?? '',
-      state: s.state ?? '',
+	  city: s.city ?? '',
       company: s.company ?? '',
       shipMethod: s.shipMethod ?? '',
       vehicleType: s.vehicleType ?? '',
       shippingCharge: Number(s.shippingCharge || 0),
       po: s.po ?? '',
       agent: s.agent ?? '',
+      
     }));
 
   const buildDataSheetPretty = (wb, title, rows) => {
@@ -891,43 +798,47 @@ function App() {
     return sheet;
   };
 
-  const buildAllRowsSheet = (wb, year, monthToRowsMap) => {
-    const sheet = wb.addWorksheet('All Rows', { views: [{ state: 'frozen', ySplit: 1 }] });
+// Creates a single flat table (all months) for Power BI
+const buildAllRowsSheet = (wb, year, monthToRowsMap) => {
+  console.log('Building All Rows sheet...');
+  const sheet = wb.addWorksheet('All Rows', { views: [{ state: 'frozen', ySplit: 1 }] });
 
-    sheet.columns = [
-      { header: 'Year', key: 'year' },
-      { header: 'Month', key: 'month' },
-      { header: 'Reference #', key: 'refNum' },
-      { header: 'Client', key: 'client' },
-      { header: 'Ship Date', key: 'shipDate' },
-      { header: 'Return Date', key: 'returnDate' },
-      { header: 'Location', key: 'location' },
-      { header: 'Return Location', key: 'returnLocation' },
-      { header: 'City', key: 'city' },
-      { header: 'State', key: 'state' },
-      { header: 'Company', key: 'company' },
-      { header: 'Ship Method', key: 'shipMethod' },
-      { header: 'Vehicle Type', key: 'vehicleType' },
-      { header: 'Charges', key: 'shippingCharge' },
-      { header: 'PO', key: 'po' },
-      { header: 'Agent', key: 'agent' },
-    ];
+  sheet.columns = [
+    { header: 'Year', key: 'year' },
+    { header: 'Month', key: 'month' },
+    { header: 'Reference #', key: 'refNum' },
+    { header: 'Ship Date', key: 'shipDate' },
+    { header: 'Return Date', key: 'returnDate' },
+    { header: 'Location', key: 'location' },
+    { header: 'Return Location', key: 'returnLocation' },
+    { header: 'City', key: 'city' },
+    { header: 'Company', key: 'company' },
+    { header: 'Ship Method', key: 'shipMethod' },
+    { header: 'Vehicle Type', key: 'vehicleType' },
+    { header: 'Charges', key: 'shippingCharge' },
+    { header: 'PO', key: 'po' },
+    { header: 'Agent', key: 'agent' },
+  ];
 
-    sheet.getRow(1).font = { bold: true };
-    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+  sheet.getRow(1).font = { bold: true };
+  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
 
-    MONTHS.forEach(m => {
-      const rows = monthToRowsMap[m] || [];
-      rows.forEach(r => {
-        sheet.addRow({ year, month: m, ...r });
-      });
+  let totalRows = 0;
+  MONTHS.forEach(m => {
+    const rows = monthToRowsMap[m] || [];
+    console.log(`Adding ${rows.length} rows for ${m}`);
+    rows.forEach(r => {
+      sheet.addRow({ year, month: m, ...r });
+      totalRows++;
     });
+  });
 
-    sheet.getColumn('shippingCharge').numFmt = '$#,##0.00';
-    autosizeColumns(sheet, { min: 10, max: 40, buffer: 2 });
+  sheet.getColumn('shippingCharge').numFmt = '$#,##0.00';
+  autosizeColumns(sheet, { min: 10, max: 40, buffer: 2 });
 
-    return sheet;
-  };
+  console.log(`All Rows sheet complete: ${totalRows} total rows`);
+  return sheet;
+};
 
   const downloadBlob = (blob, filename) => {
     const url = URL.createObjectURL(blob);
@@ -983,34 +894,12 @@ function App() {
     const capture = async (node) =>
       node ? await toPng(node, { cacheBust: true, backgroundColor: 'white', pixelRatio: 2 }) : null;
 
-    const statsWereHidden = !statusEnabled;
-    if (statsWereHidden) {
-      setStatusEnabled(true);
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    const [
-  imgCostPerCompany,
-  imgShipmentCount,
-  imgRevenueDist,
-  imgClientStats,
-  imgAgentStats,
-  imgCityStats,
-  imgStateStats,
-] = await Promise.all([
-  capture(costPerCompanyRef.current),
-  capture(shipmentCountRef.current),
-  capture(revenueDistRef.current),
-  capture(clientStatsRef.current),
-  capture(agentStatsRef.current),
-  capture(cityStatsRef.current),
-  capture(stateStatsRef.current),
-]);
-
-
-    if (statsWereHidden) {
-      setStatusEnabled(false);
-    }
+    const [imgCostPerCompany, imgShipmentCount, imgRevenueDist, imgCityStats] = await Promise.all([
+      capture(costPerCompanyRef.current),
+      capture(shipmentCountRef.current),
+      capture(revenueDistRef.current),
+      capture(cityStatsRef.current),
+    ]);
 
     const wb = new ExcelJS.Workbook();
     const dataRows = mapRowsForExcel(shipments);
@@ -1066,10 +955,7 @@ function App() {
     addImg(imgCostPerCompany, 2, 0, 900, 350);
     addImg(imgShipmentCount, 18, 0, 900, 350);
     addImg(imgRevenueDist, 34, 0, 900, 350);
-    addImg(imgClientStats, 50, 0, 900, 350);
-    addImg(imgAgentStats, 66, 0, 900, 350);
-    addImg(imgCityStats, 82, 0, 900, 350);
-	addImg(imgStateStats,     98, 0, 900, 350);
+    addImg(imgCityStats, 50, 0, 900, 350);
 
     const buf = await wb.xlsx.writeBuffer();
     downloadBlob(
@@ -1079,46 +965,61 @@ function App() {
   };
 
   const exportAllMonthsExcel = async () => {
-    try {
-      const wb = new ExcelJS.Workbook();
-      const monthToRowsMap = {};
+  try {
+    const wb = new ExcelJS.Workbook();
+    const monthToRowsMap = {};
 
-      for (const month of MONTHS) {
-        const docSnap = await getDoc(monthDocRef(selectedYear, month));
-        const list = docSnap.exists() ? docSnap.data().shipments || [] : [];
-        const rows = mapRowsForExcel(list);
-        monthToRowsMap[month] = rows;
-        buildDataSheetPretty(wb, `${month} ${selectedYear}`, rows);
-      }
-
-      buildAllRowsSheet(wb, selectedYear, monthToRowsMap);
-
-      const buf = await wb.xlsx.writeBuffer();
-      downloadBlob(
-        new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-        `freight-${selectedYear}-all-months-${new Date().toISOString().split('T')[0]}.xlsx`
-      );
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert(`Export failed: ${error.message}`);
+    // Collect data from all months
+    console.log('Starting export...');
+    for (const month of MONTHS) {
+      const docSnap = await getDoc(monthDocRef(selectedYear, month));
+      const list = docSnap.exists() ? docSnap.data().shipments || [] : [];
+      const rows = mapRowsForExcel(list);
+      
+      monthToRowsMap[month] = rows;
+      console.log(`${month}: ${rows.length} rows collected`);
+      
+      // Create individual month sheets
+      buildDataSheetPretty(wb, `${month} ${selectedYear}`, rows);
     }
-  };
+
+    // Debug totals
+    const totalRecords = Object.values(monthToRowsMap).reduce((sum, rows) => sum + rows.length, 0);
+    console.log(`Total records across all months: ${totalRecords}`);
+
+    // Create the flat Power BI table BEFORE writing buffer
+    console.log('Creating All Rows sheet...');
+    buildAllRowsSheet(wb, selectedYear, monthToRowsMap);
+    console.log(`Workbook now has ${wb.worksheets.length} worksheets`);
+
+    // Write and download
+    const buf = await wb.xlsx.writeBuffer();
+    downloadBlob(
+      new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      `freight-${selectedYear}-all-months-${new Date().toISOString().split('T')[0]}.xlsx`
+    );
+    
+    console.log('Export complete!');
+  } catch (error) {
+    console.error('Export failed:', error);
+    alert(`Export failed: ${error.message}`);
+  }
+};
 
   const headerKeyMap = {
     'reference #': 'refNum',
-    'client': 'client',
     'ship date': 'shipDate',
     'return date': 'returnDate',
     'location': 'location',
     'return location': 'returnLocation',
-    'city': 'city',
-    'state': 'state',
+	'city': 'city',
     'company': 'company',
     'ship method': 'shipMethod',
     'vehicle type': 'vehicleType',
     'charges': 'shippingCharge',
     'po': 'po',
     'agent': 'agent',
+    
   };
 
   const parseSheetToShipments = (sheet) => {
@@ -1141,19 +1042,18 @@ function App() {
       const s = {
         id: Date.now() + r,
         refNum: '',
-        client: '',
         shipDate: '',
         returnDate: '',
         location: '',
         returnLocation: '',
-        city: '',
-        state: '',
+		city: '',
         company: '',
         shipMethod: '',
         vehicleType: '',
         shippingCharge: 0,
         po: '',
         agent: '',
+        
       };
 
       row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
@@ -1171,7 +1071,7 @@ function App() {
             s[field] = toISODateUTC(d);
           } else {
             const str = String(v).trim();
-            if (/^\\d{4}-\\d{2}-\\d{2}$/.test(str)) {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
               s[field] = str;
             } else {
               const d = new Date(str);
@@ -1185,22 +1085,15 @@ function App() {
         };
 
         if (key === 'shippingCharge') {
-          const num = typeof val === 'number' ? val : Number(String(val).replace(/[^0-9.-]/g, ''));
+         const num = typeof val === 'number' ? val : Number(String(val).replace(/[^0-9.-]/g, ''));
           s.shippingCharge = isNaN(num) ? 0 : num;
         } else if (key === 'shipDate' || key === 'returnDate') {
           setDateSafely(val, key);
-        } else if (key === 'state') {
-          const usStateRE = /^[A-Za-z]{2}$/;
-          let v = val == null ? '' : String(val);
-          v = v.toUpperCase().slice(0,2);
-          if (!usStateRE.test(v)) {
-            // leave uppercase 2 letters; allow non-standard if needed
-          }
-          s.state = v;
         } else {
           s[key] = val == null ? '' : String(val);
         }
       });
+
 
       const meaningful = s.refNum || s.company || s.shippingCharge > 0;
       if (meaningful) shipmentsOut.push(s);
@@ -1231,8 +1124,8 @@ function App() {
       for (const sheet of wb.worksheets) {
         const name = (sheet.name || '').trim();
 
-        if (!/^([A-Za-z]+)\\s+(\\d{4})$/.test(name)) continue;
-        const [, monthName, yearStr] = name.match(/^([A-Za-z]+)\\s+(\\d{4})$/) || [];
+        if (!/^([A-Za-z]+)\s+(\d{4})$/.test(name)) continue;
+        const [, monthName, yearStr] = name.match(/^([A-Za-z]+)\s+(\d{4})$/) || [];
         if (!MONTHS.includes(monthName)) continue;
 
         const yearNum = parseInt(yearStr, 10);
@@ -1254,8 +1147,8 @@ function App() {
       } else {
         const lines = changed
           .sort((a, b) => (a.year - b.year) || (MONTHS.indexOf(a.month) - MONTHS.indexOf(b.month)))
-          .map(c => `${c.month} ${c.year}: ${c.count} rows`).join('\\n');
-        alert(`Import complete:\\n${lines}`);
+          .map(c => `${c.month} ${c.year}: ${c.count} rows`).join('\n');
+        alert(`Import complete:\n${lines}`);
       }
     } catch (err) {
       console.error('Import failed:', err);
@@ -1264,7 +1157,7 @@ function App() {
       setIsImporting(false);
     }
   };
-  
+
   const companySummary = (() => {
     const summary = {};
     shipments.forEach((s) => {
@@ -1278,54 +1171,6 @@ function App() {
       .sort((a, b) => b.total - a.total);
   })();
 
-  const clientSummary = (() => {
-    const summary = {};
-    shipments.forEach((s) => {
-      if (s.client && s.client.trim() !== '') {
-        const key = s.client;
-        if (!summary[key]) summary[key] = { count: 0, total: 0 };
-        summary[key].count += 1;
-        summary[key].total += Number(s.shippingCharge || 0);
-      }
-    });
-    return Object.entries(summary)
-      .map(([client, data]) => ({ client, ...data }))
-      .sort((a, b) => a.client.localeCompare(b.client));
-  })();
-
-  const agentSummary = (() => {
-    const summary = {};
-    shipments.forEach((s) => {
-      if (s.agent && s.agent.trim() !== '') {
-        const key = s.agent;
-        if (!summary[key]) summary[key] = { count: 0, total: 0 };
-        summary[key].count += 1;
-        summary[key].total += Number(s.shippingCharge || 0);
-      }
-    });
-    return Object.entries(summary)
-      .map(([agent, data]) => ({ agent, ...data }))
-      .sort((a, b) => a.agent.localeCompare(b.agent));
-  })();
-
-  const stateSummary = (() => {
-  const summary = {};
-  shipments.forEach((s) => {
-    const st = (s.state || '').trim();
-    if (!st) return;
-    const key = st.toUpperCase();
-    if (!summary[key]) summary[key] = { count: 0, total: 0 };
-    summary[key].count += 1;
-    summary[key].total += Number(s.shippingCharge || 0);
-  });
-  return Object.entries(summary)
-    .map(([state, data]) => ({ state, ...data }))
-    .sort((a, b) => a.state.localeCompare(b.state));
-})();
-
-
-
- 
   const citySummary = (() => {
     const summary = {};
     shipments.forEach((s) => {
@@ -1338,72 +1183,16 @@ function App() {
     });
     return Object.entries(summary)
       .map(([city, data]) => ({ city, ...data }))
-      .sort((a, b) => a.city.localeCompare(b.city));
+      .sort((a, b) => b.total - a.total);
   })();
 
   const totalCost = shipments.reduce((sum, s) => sum + Number(s.shippingCharge || 0), 0);
   const maxCount = Math.max(...companySummary.map((c) => c.count), 1);
-  const maxClientCount = Math.max(...clientSummary.map((c) => c.count), 1);
-  const maxAgentCount = Math.max(...agentSummary.map((c) => c.count), 1);
   const maxCityCount = Math.max(...citySummary.map((c) => c.count), 1);
-  const maxStateCount = Math.max(...stateSummary.map((c) => c.count), 1);
   const chartColors = [
     '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981',
     '#06b6d4', '#6366f1', '#f97316', '#14b8a6', '#f43f5e',
   ];
-
-  const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  const sortedShipments = React.useMemo(() => {
-    if (!sortConfig.key) return shipments;
-
-    const sorted = [...shipments].sort((a, b) => {
-      const aVal = a[sortConfig.key] ?? '';
-      const bVal = b[sortConfig.key] ?? '';
-
-      if (sortConfig.key === 'shippingCharge') {
-        const aNum = Number(aVal);
-        const bNum = Number(bVal);
-        return sortConfig.direction === 'asc' ? aNum - bNum : bNum - aNum;
-      }
-
-      if (sortConfig.key === 'shipDate' || sortConfig.key === 'returnDate') {
-        const aIsBlank = !aVal || aVal === '';
-        const bIsBlank = !bVal || bVal === '';
-        
-        if (aIsBlank && bIsBlank) return 0;
-        if (aIsBlank) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (bIsBlank) return sortConfig.direction === 'asc' ? 1 : -1;
-        
-        const aDate = new Date(aVal).getTime();
-        const bDate = new Date(bVal).getTime();
-        return sortConfig.direction === 'asc' ? aDate - bDate : bDate - aDate;
-      }
-
-      const aStr = String(aVal).toLowerCase();
-      const bStr = String(bVal).toLowerCase();
-      if (sortConfig.direction === 'asc') {
-        return aStr.localeCompare(bStr);
-      } else {
-        return bStr.localeCompare(aStr);
-      }
-    });
-
-    return sorted;
-  }, [shipments, sortConfig]);
-
-  const getSortIcon = (columnKey) => {
-    if (sortConfig.key !== columnKey) {
-      return ' ⇅';
-    }
-    return sortConfig.direction === 'asc' ? ' ▲' : ' ▼';
-  };
 
   const renderCell = (rowIndex, field, value) => {
     if (isYTD) {
@@ -1432,8 +1221,6 @@ function App() {
       field === 'location' ||
       field === 'returnLocation' ||
       field === 'city' ||
-      field === 'state' ||
-      field === 'client' ||
       field === 'shipMethod' ||
       field === 'vehicleType';
 
@@ -1453,11 +1240,9 @@ function App() {
               border: '2px solid #3b82f6',
               outline: 'none',
               fontSize: '12px',
-              textTransform: field === 'state' ? 'uppercase' : 'none',
             }}
             step={isNumeric ? '0.01' : undefined}
             autoComplete="off"
-            maxLength={field === 'state' ? 2 : undefined}
           />
           {hasAutocomplete && showDropdown && filteredOptions.length > 0 && dropdownRect &&
             createPortal(
@@ -1511,332 +1296,12 @@ function App() {
     );
   };
 
-  const handleSingleAdd = async () => {
-    const value = singleAddModal.value.trim();
-    
-    if (!value) {
-      alert('Please enter a value');
-      return;
-    }
-
-    const type = singleAddModal.type;
-    let currentList, fieldName, processor;
-
-    switch (type) {
-      case 'company':
-        currentList = companies;
-        fieldName = 'companies';
-        processor = (val) => val.toUpperCase();
-        break;
-      case 'location':
-        currentList = locations;
-        fieldName = 'locations';
-        processor = (val) => val;
-        break;
-      case 'agent':
-        currentList = agents;
-        fieldName = 'agents';
-        processor = (val) => {
-          let candidate = val.toUpperCase();
-          if (!candidate.includes('.')) {
-            const parts = candidate.split(/\s+/).filter(Boolean);
-            if (parts.length >= 2) {
-              const firstInitial = parts[0][0];
-              const last = parts.slice(1).join('').replace(/[^A-Z]/g, '');
-              candidate = `${firstInitial}.${last}`;
-            }
-          }
-          return candidate;
-        };
-        break;
-      case 'city':
-        currentList = cities;
-        fieldName = 'cities';
-        processor = (val) => val;
-        break;
-      case 'state':
-        currentList = states;
-        fieldName = 'states';
-        processor = (val) => (val || '').toUpperCase().slice(0,2);
-        break;
-      case 'client':
-        currentList = clients;
-        fieldName = 'clients';
-        processor = (val) => val;
-        break;
-      default:
-        return;
-    }
-
-    const processed = processor(value);
-    const exists = currentList.some(item => 
-      String(item).toLowerCase() === String(processed).toLowerCase()
-    );
-    
-    if (exists) {
-      alert(`"${processed}" already exists!`);
-      return;
-    }
-
-    const updatedList = [...currentList, processed].sort((a, b) =>
-      String(a).localeCompare(String(b), undefined, { sensitivity: 'base' })
-    );
-
-    try {
-      const cfgRef = doc(db, 'freight-config', 'global');
-      await setDoc(cfgRef, { 
-        [fieldName]: updatedList, 
-        updatedAt: new Date().toISOString() 
-      }, { merge: true });
-      
-      setSingleAddModal({ open: false, type: '', value: '' });
-      alert(`✅ Added "${processed}" successfully!`);
-    } catch (e) {
-      console.error(`Failed to add ${type}:`, e);
-      alert(`Failed to add ${type}. Check your permissions/rules.`);
-    }
-  };
-
-  const SingleAddModal = () => {
-    if (!singleAddModal.open) return null;
-
-    return createPortal(
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000,
-          isolation: 'isolate',
-        }}
-        onClick={() => setSingleAddModal({ open: false, type: '', value: '' })}
-      >
-        <div 
-          style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            width: '90%',
-            maxWidth: '400px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-            isolation: 'isolate',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px', color: '#1e293b' }}>
-            Quick Add One {singleAddModal.type.charAt(0).toUpperCase() + singleAddModal.type.slice(1)}
-          </h3>
-
-          <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '12px' }}>
-            Enter the {singleAddModal.type} name:
-          </p>
-
-          <input
-            type="text"
-            dir="ltr"
-            value={singleAddModal.value}
-            onChange={(e) => setSingleAddModal({ ...singleAddModal, value: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleSingleAdd();
-              }
-            }}
-            placeholder={`Enter ${singleAddModal.type} name...`}
-            style={{
-              width: '100%',
-              padding: '12px',
-              border: '1px solid #cbd5e1',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontFamily: 'Arial, sans-serif',
-              marginBottom: '16px',
-              boxSizing: 'border-box',
-              direction: 'ltr',
-              textAlign: 'left',
-            }}
-            autoFocus
-          />
-                  
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-            <button
-              onClick={() => setSingleAddModal({ open: false, type: '', value: '' })}
-              style={{
-                padding: '8px 16px',
-                background: '#e2e8f0',
-                color: '#475569',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSingleAdd}
-              style={{
-                padding: '8px 16px',
-                background: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-              }}
-            >
-              Add
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
-  };
-
-  const BulkAddModal = () => {
-    if (!bulkAddModal.open) return null;
-
-    return createPortal(
-      <div 
-        role="dialog" aria-modal="true"
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000,
-          isolation: 'isolate',
-        }}
-        onClick={() => setBulkAddModal({ open: false, type: '', items: '' })}
-      >
-        <div 
-          style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            width: '90%',
-            maxWidth: '600px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-            isolation: 'isolate',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px', color: '#1e293b' }}>
-            Bulk Add {bulkAddModal.type.charAt(0).toUpperCase() + bulkAddModal.type.slice(1)}s
-          </h3>
-
-          <div style={{ 
-            padding: '12px', 
-            background: '#fef3c7', 
-            borderRadius: '8px', 
-            marginBottom: '12px',
-            fontSize: '13px',
-            color: '#92400e'
-          }}>
-            <strong>⚠️ Typing Issue?</strong> If text appears backwards when typing, try <strong>copy/pasting</strong> your list instead, or use the "Quick Add One" button for single items.
-          </div>
-
-          <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '12px' }}>
-            Enter one {bulkAddModal.type} per line, or paste from Excel/Sheets. Duplicates will be skipped.
-          </p>
-
-          <textarea
-            dir="ltr"
-            value={bulkAddModal.items}
-            onChange={(e) => setBulkAddModal({ ...bulkAddModal, items: e.target.value })}
-            placeholder="Type here..."
-            style={{
-              width: '100%',
-              height: '200px',
-              padding: '12px',
-              border: '1px solid #cbd5e1',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontFamily: 'Arial, sans-serif',
-              marginBottom: '16px',
-              boxSizing: 'border-box',
-              resize: 'vertical',
-              lineHeight: 1.4,
-              direction: 'ltr',
-              textAlign: 'left',
-              unicodeBidi: 'embed',
-            }}
-            autoFocus
-          />
-                  
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-            <button
-              onClick={() => setBulkAddModal({ open: false, type: '', items: '' })}
-              style={{
-                padding: '8px 16px',
-                background: '#e2e8f0',
-                color: '#475569',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleBulkAdd}
-              style={{
-                padding: '8px 16px',
-                background: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-              }}
-            >
-              Add All
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
-  };
-  
+  // Show login screen if not authenticated (AFTER all hooks)
   if (!isAuthenticated) {
     return <PasswordLogin onLogin={handleLogin} />;
   }
 
- if (showAnalytics) {
-  return (
-    <EnhancedAnalytics
-      shipments={shipments}
-      selectedYear={selectedYear}
-      selectedMonth={selectedMonth}
-      companies={companies}
-      agents={agents}
-      clients={clients}
-      cities={cities}
-      states={states}
-      onBack={() => setShowAnalytics(false)}
-      />
-    );
-  }
-
-
+  // Main app render
   return (
     <div style={{ minHeight: '100vh', background: 'white' }}>
       <div style={{ maxWidth: '98%', margin: '0 auto', padding: '16px' }}>
@@ -1851,165 +1316,142 @@ function App() {
               {!isSaving && lastSaved && !isYTD && <span style={{ fontSize: '11px', color: '#10b981', marginLeft: '8px' }}>✓ Saved at {lastSaved}</span>}
               {isYTD && <span style={{ fontSize: '11px', color: '#475569', marginLeft: '8px' }}>YTD view • rows are read-only</span>}
               <span style={{ fontSize: '11px', color: '#3b82f6', marginLeft: '8px' }}>🌐 Multi-user enabled</span>
-              <span style={{ 
-                fontSize: '11px', 
-                color: 'white',
-                background: statusEnabled ? '#10b981' : '#64748b',
-                padding: '2px 8px',
-                borderRadius: '4px',
-                marginLeft: '8px',
-                fontWeight: '600'
-              }}>
-                {statusEnabled ? '📊 Stats Visible' : '📊 Stats Hidden'}
-              </span>
             </p>
           </div>
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button onClick={handleLogout} style={{ padding: '8px 16px', background: '#64748b', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
-              🔒 Logout
+            <button
+              onClick={handleLogout}
+              style={{ padding: '8px 16px', background: '#64748b', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+            >
+              🔓 Logout
             </button>
 
-            <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
-              {YEAR_OPTIONS.map((y) => (<option key={y} value={y}>{y}</option>))}
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
+            >
+              {YEAR_OPTIONS.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
             </select>
 
-            <select value={selectedMonth} onChange={(e) => handleMonthChange(e.target.value)} style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
+            <select
+              value={selectedMonth}
+              onChange={(e) => handleMonthChange(e.target.value)}
+              style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
+            >
               {MONTHS_WITH_YTD.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
 
             {isYTD && (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <label style={{ fontSize: 12, color: '#475569' }}>Edit to month:</label>
-                <select value={editTargetMonth} onChange={(e) => setEditTargetMonth(e.target.value)} style={{ padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13 }}>
+                <select
+                  value={editTargetMonth}
+                  onChange={(e) => setEditTargetMonth(e.target.value)}
+                  style={{ padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13 }}
+                >
                   {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
             )}
 
-			{/* ← ADD THIS ANALYTICS BUTTON HERE */}
-  <button 
-    onClick={() => setShowAnalytics(true)}
-    style={{ 
-      padding: '8px 16px', 
-      background: '#7c3aed', 
-      color: 'white', 
-      border: 'none', 
-      borderRadius: '8px', 
-      fontSize: '13px', 
-      fontWeight: '600', 
-      cursor: 'pointer',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px'
-    }}
-  >
-    <span>📊</span>
-    Analytics
-  </button>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={newCompany}
+                placeholder="Add company… (paste multiple separated by space/comma/newline)"
+                onChange={(e) => setNewCompany(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addCompanyGlobal(); }}
+                style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', minWidth: 180 }}
+              />
+              <button
+                onClick={addCompanyGlobal}
+                style={{ padding: '8px 12px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                + Add Company
+              </button>
+            </div>
 
-  <button onClick={() => setSingleAddModal({ open: true, type: 'company', value: '' })} style={{ padding: '8px 12px', background: '#14b8a6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one company">
-    ⚡ Quick Add One Company
-  </button>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={newLocation}
+                placeholder="Add location… (paste multiple separated by space/comma/newline)"
+                onChange={(e) => setNewLocation(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addLocationGlobal(); }}
+                style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', minWidth: 220 }}
+              />
+              <button
+                onClick={addLocationGlobal}
+                style={{ padding: '8px 12px', background: '#155e75', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                + Add Location
+              </button>
+            </div>
 
-            <button onClick={() => setSingleAddModal({ open: true, type: 'location', value: '' })} style={{ padding: '8px 12px', background: '#0891b2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one location">
-              ⚡ Quick Add One Location
-            </button>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={newAgent}
+                placeholder='Add agent… (e.g., "J.DOE" or "John Doe") (paste multiple)'
+                onChange={(e) => setNewAgent(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addAgentGlobal(); }}
+                style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', minWidth: 200 }}
+              />
+              <button
+                onClick={addAgentGlobal}
+                style={{ padding: '8px 12px', background: '#1d4ed8', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                + Add Agent
+              </button>
+            </div>
 
-            <button onClick={() => setSingleAddModal({ open: true, type: 'agent', value: '' })} style={{ padding: '8px 12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one agent">
-              ⚡ Quick Add One Agent
-            </button>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={newCity}
+                placeholder="Add city… (paste multiple separated by space/comma/newline)"
+                onChange={(e) => setNewCity(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addCityGlobal(); }}
+                style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', minWidth: 180 }}
+              />
+              <button
+                onClick={addCityGlobal}
+                style={{ padding: '8px 12px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                + Add City
+              </button>
+            </div>
 
-            <button onClick={() => setSingleAddModal({ open: true, type: 'city', value: '' })} style={{ padding: '8px 12px', background: '#a855f7', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one city">
-              ⚡ Quick Add One City
-            </button>
-
-            <button onClick={() => setSingleAddModal({ open: true, type: 'state', value: '' })} style={{ padding: '8px 12px', background: '#9ca3af', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one state">
-              ⚡ Quick Add One State
-            </button>
-
-            <button onClick={() => setSingleAddModal({ open: true, type: 'client', value: '' })} style={{ padding: '8px 12px', background: '#f472b6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one client">
-              ⚡ Quick Add One Client
-            </button>
-
-            <button 
-              onClick={() => setShowBulkOptions(!showBulkOptions)} 
-              style={{ 
-                padding: '8px 16px', 
-                background: showBulkOptions ? '#059669' : '#6b7280', 
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '8px', 
-                fontSize: '13px', 
-                fontWeight: '600', 
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-              title={showBulkOptions ? 'Hide bulk options' : 'Show bulk options'}
+            <button
+              onClick={exportMonthExcel}
+              style={{ padding: '8px 12px', background: '#166534', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
             >
-              <span>{showBulkOptions ? '📂' : '📁'}</span>
-              {showBulkOptions ? 'Hide Bulk Options' : 'Show Bulk Options'}
-            </button>
-
-            {showBulkOptions && (
-              <>
-                <button onClick={() => setBulkAddModal({ open: true, type: 'company', items: '' })} style={{ padding: '8px 12px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Add companies (one per line or paste list)">
-                  📝 Bulk Add Companies
-                </button>
-
-                <button onClick={() => setBulkAddModal({ open: true, type: 'location', items: '' })} style={{ padding: '8px 12px', background: '#155e75', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Add locations (one per line or paste list)">
-                  📝 Bulk Add Locations
-                </button>
-
-                <button onClick={() => setBulkAddModal({ open: true, type: 'agent', items: '' })} style={{ padding: '8px 12px', background: '#1d4ed8', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title='Add agents (e.g., "J.DOE" or "John Doe" per line)'>
-                  📝 Bulk Add Agents
-                </button>
-
-                <button onClick={() => setBulkAddModal({ open: true, type: 'city', items: '' })} style={{ padding: '8px 12px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Add cities (one per line or paste list)">
-                  📝 Bulk Add Cities
-                </button>
-
-                <button onClick={onClickImportCitiesJSON} style={{ padding: '8px 12px', background: '#9333ea', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Import cities from JSON file">
-                  📁 Import Cities (JSON)
-                </button>
-
-                <button onClick={() => setBulkAddModal({ open: true, type: 'state', items: '' })} style={{ padding: '8px 12px', background: '#6b7280', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Add states (2-letter codes, one per line)">
-                  📝 Bulk Add States
-                </button>
-
-                <button onClick={() => setBulkAddModal({ open: true, type: 'client', items: '' })} style={{ padding: '8px 12px', background: '#db2777', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Add clients (one per line or paste list)">
-                  📝 Bulk Add Clients
-                </button>
-
-                <button onClick={onClickImportClientsJSON} style={{ padding: '8px 12px', background: '#ec4899', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Import clients from JSON file">
-                  📁 Import Clients (JSON)
-                </button>
-              </>
-            )}
-
-            <button onClick={exportMonthExcel} style={{ padding: '8px 12px', background: '#166534', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
               ⬇️ Export {isYTD ? 'YTD' : 'Month'} (Excel)
             </button>
-
-            <button onClick={exportAllMonthsExcel} style={{ padding: '8px 12px', background: '#047857', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+            <button
+              onClick={exportAllMonthsExcel}
+              style={{ padding: '8px 12px', background: '#047857', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+            >
               ⬇️ Export All (Excel)
             </button>
 
-            <input ref={fileInputRef} type="file" accept=".xlsx" onChange={onImportFileChange} style={{ display: 'none' }} />
-            
-            <input ref={jsonFileInputRef} type="file" accept=".json" onChange={handleImportCitiesJSON} style={{ display: 'none' }} />
-            
-            <input ref={jsonClientsInputRef} type="file" accept=".json" onChange={handleImportClientsJSON} style={{ display: 'none' }} />
-            
-            <button onClick={onClickImport} disabled={isImporting} style={{ padding: '8px 12px', background: isImporting ? '#9ca3af' : '#312e81', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: isImporting ? 'not-allowed' : 'pointer' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx"
+              onChange={onImportFileChange}
+              style={{ display: 'none' }}
+            />
+            <button
+              onClick={onClickImport}
+              disabled={isImporting}
+              style={{ padding: '8px 12px', background: isImporting ? '#9ca3af' : '#312e81', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: isImporting ? 'not-allowed' : 'pointer' }}
+            >
               {isImporting ? '⏳ Importing…' : '⬆️ Import All (Excel)'}
-            </button>
-            
-            <button onClick={() => setStatusEnabled(!statusEnabled)} style={{ padding: '8px 16px', background: statusEnabled ? '#10b981' : '#64748b', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} title={statusEnabled ? 'Click to hide statistics' : 'Click to show statistics'}>
-              <span style={{ fontSize: '16px' }}>{statusEnabled ? '👁️' : '👁️‍🗨️'}</span>
-              {statusEnabled ? 'Hide Stats' : 'Show Stats'}
             </button>
           </div>
         </div>
@@ -2033,6 +1475,172 @@ function App() {
           </div>
         </div>
 
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+          <div ref={costPerCompanyRef} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px' }}>
+            <h3 style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '12px', color: '#334155' }}>Shipping Cost Per Company</h3>
+            {companySummary.length > 0 ? (
+              <table style={{ width: '100%', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                    <th style={{ textAlign: 'left', padding: '4px', fontWeight: '600' }}>Company</th>
+                    <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Total Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {companySummary.map((item, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '4px' }}>{item.company}</td>
+                      <td style={{ textAlign: 'right', padding: '4px' }}>
+                        ${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 'bold', borderTop: '2px solid #cbd5e1' }}>
+                    <td style={{ padding: '4px' }}>Total</td>
+                    <td style={{ textAlign: 'right', padding: '4px' }}>
+                      ${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : (
+              <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', padding: '20px' }}>No data for {selectedMonth}</p>
+            )}
+          </div>
+
+          <div ref={shipmentCountRef} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px' }}>
+            <h3 style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '16px', color: '#334155' }}>Shipment Count by Company</h3>
+            {companySummary.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {companySummary.map((item, idx) => (
+                  <div key={idx}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '11px' }}>
+                      <span style={{ fontWeight: '600', color: '#475569' }}>{item.company}</span>
+                      <span style={{ color: '#64748b' }}>{item.count} shipments</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ flex: 1, height: '28px', background: '#f1f5f9', borderRadius: '6px', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            width: `${(item.count / maxCount) * 100}%`,
+                            height: '100%',
+                            background: chartColors[idx % chartColors.length],
+                            borderRadius: '6px',
+                            transition: 'width 0.3s ease',
+                            boxShadow: `0 0 10px ${chartColors[idx % chartColors.length]}40`,
+                          }}
+                        />
+                      </div>
+                      <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#334155', minWidth: '30px', textAlign: 'right' }}>{item.count}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', padding: '20px' }}>No data for {selectedMonth}</p>
+            )}
+          </div>
+        </div>
+
+        <div ref={revenueDistRef} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+          <h3 style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '16px', color: '#334155' }}>Revenue Distribution by Company</h3>
+          {companySummary.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {companySummary.map((item, idx) => (
+                <div key={idx}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '11px' }}>
+                    <span style={{ fontWeight: '600', color: '#475569' }}>{item.company}</span>
+                    <span style={{ color: '#64748b' }}>{totalCost > 0 ? ((item.total / totalCost) * 100).toFixed(1) : '0.0'}%</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ flex: 1, height: '32px', background: '#f1f5f9', borderRadius: '8px', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          width: `${totalCost > 0 ? (item.total / totalCost) * 100 : 0}%`,
+                          height: '100%',
+                          background: `linear-gradient(90deg, ${chartColors[idx % chartColors.length]}, ${chartColors[idx % chartColors.length]}dd)`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          paddingRight: '12px',
+                          justifyContent: 'flex-end',
+                          color: 'white',
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          transition: 'width 0.5s ease',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        ${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', padding: '20px' }}>No data for {selectedMonth}</p>
+          )}
+        </div>
+
+        <div ref={cityStatsRef} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+          <h3 style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '16px', color: '#334155' }}>Shipments by City</h3>
+          {citySummary.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <table style={{ width: '100%', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                      <th style={{ textAlign: 'left', padding: '4px', fontWeight: '600' }}>City</th>
+                      <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Shipments</th>
+                      <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Total Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {citySummary.map((item, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '4px' }}>{item.city}</td>
+                        <td style={{ textAlign: 'right', padding: '4px' }}>{item.count}</td>
+                        <td style={{ textAlign: 'right', padding: '4px' }}>
+                          ${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div>
+                <h4 style={{ fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: '#475569' }}>Shipment Count by City</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {citySummary.map((item, idx) => (
+                    <div key={idx}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', fontSize: '10px' }}>
+                        <span style={{ fontWeight: '600', color: '#475569' }}>{item.city}</span>
+                        <span style={{ color: '#64748b' }}>{item.count}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <div style={{ flex: 1, height: '20px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${(item.count / maxCityCount) * 100}%`,
+                              height: '100%',
+                              background: chartColors[idx % chartColors.length],
+                              borderRadius: '4px',
+                              transition: 'width 0.3s ease',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', padding: '20px' }}>No city data for {selectedMonth}</p>
+          )}
+        </div>
+
         <div style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px' }}>
           <div style={{ background: '#1d4ed8', color: 'white', padding: '8px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
             <h2 style={{ fontWeight: 'bold', fontSize: '14px' }}>Shipment Details - {selectedMonth} {selectedYear}</h2>
@@ -2044,91 +1652,56 @@ function App() {
             </button>
           </div>
 
-          <div style={{ overflowX: 'auto', height: 'calc(100vh - 400px)', overflowY: 'auto' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead style={{ background: '#f1f5f9', position: 'sticky', top: 0, zIndex: 10 }}>
+              <thead style={{ background: '#f1f5f9' }}>
                 <tr>
-                  <th onClick={() => handleSort('refNum')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    REFERENCE #{getSortIcon('refNum')}
-                  </th>
-                  <th onClick={() => handleSort('client')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    CLIENT{getSortIcon('client')}
-                  </th>
-                  <th onClick={() => handleSort('shipDate')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    SHIP DATE{getSortIcon('shipDate')}
-                  </th>
-                  <th onClick={() => handleSort('returnDate')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    RETURN DATE{getSortIcon('returnDate')}
-                  </th>
-                  <th onClick={() => handleSort('location')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    LOCATION{getSortIcon('location')}
-                  </th>
-                  <th onClick={() => handleSort('returnLocation')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    RETURN LOCATION{getSortIcon('returnLocation')}
-                  </th>
-                  <th onClick={() => handleSort('city')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    CITY{getSortIcon('city')}
-                  </th>
-                  <th onClick={() => handleSort('state')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    STATE{getSortIcon('state')}
-                  </th>
-                  <th onClick={() => handleSort('company')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    COMPANY{getSortIcon('company')}
-                  </th>
-                  <th onClick={() => handleSort('shipMethod')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    SHIP METHOD{getSortIcon('shipMethod')}
-                  </th>
-                  <th onClick={() => handleSort('vehicleType')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    VEHICLE TYPE{getSortIcon('vehicleType')}
-                  </th>
-                  <th onClick={() => handleSort('shippingCharge')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    CHARGES{getSortIcon('shippingCharge')}
-                  </th>
-                  <th onClick={() => handleSort('po')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    PO{getSortIcon('po')}
-                  </th>
-                  <th onClick={() => handleSort('agent')} style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', userSelect: 'none' }}>
-                    AGENT{getSortIcon('agent')}
-                  </th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>REFERENCE #</th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>SHIP DATE</th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>RETURN DATE</th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>LOCATION</th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>RETURN LOCATION</th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>CITY</th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>COMPANY</th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>SHIP METHOD</th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>VEHICLE TYPE</th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>CHARGES</th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>PO</th>
+                  <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>AGENT</th>
                   <th style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold', color: '#334155' }}>ACTION</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedShipments.length > 0 ? (
-                  sortedShipments.map((shipment, idx) => {
-                    const originalIndex = shipments.findIndex(s => s.id === shipment.id);
-                    return (
-                      <tr key={shipment.id} style={{ background: idx % 2 === 0 ? 'white' : '#f8fafc' }}>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'refNum', shipment.refNum)}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'client', shipment.client || '')}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'shipDate', shipment.shipDate)}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'returnDate', shipment.returnDate)}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'location', shipment.location)}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'returnLocation', shipment.returnLocation)}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'city', shipment.city || '')}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'state', shipment.state || '')}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'company', shipment.company)}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'shipMethod', shipment.shipMethod)}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'vehicleType', shipment.vehicleType)}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'shippingCharge', shipment.shippingCharge)}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'po', shipment.po)}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(originalIndex, 'agent', shipment.agent)}</td>
-                        <td style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'center' }}>
-                          <button
-                            onClick={() => handleDeleteRow(originalIndex)}
-                            disabled={isYTD}
-                            style={{ color: isYTD ? '#94a3b8' : '#dc2626', background: 'none', border: 'none', cursor: isYTD ? 'not-allowed' : 'pointer', fontSize: '16px' }}
-                            title={isYTD ? 'YTD view: delete disabled' : 'Delete'}
-                          >
-                            🗑️
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                {shipments.length > 0 ? (
+                  shipments.map((shipment, idx) => (
+                    <tr key={shipment.id} style={{ background: idx % 2 === 0 ? 'white' : '#f8fafc' }}>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'refNum', shipment.refNum)}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'shipDate', shipment.shipDate)}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'returnDate', shipment.returnDate)}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'location', shipment.location)}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'returnLocation', shipment.returnLocation)}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'city', shipment.city || '')}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'company', shipment.company)}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'shipMethod', shipment.shipMethod)}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'vehicleType', shipment.vehicleType)}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'shippingCharge', shipment.shippingCharge)}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'po', shipment.po)}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: 0 }}>{renderCell(idx, 'agent', shipment.agent)}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => handleDeleteRow(idx)}
+                          disabled={isYTD}
+                          style={{ color: isYTD ? '#94a3b8' : '#dc2626', background: 'none', border: 'none', cursor: isYTD ? 'not-allowed' : 'pointer', fontSize: '16px' }}
+                          title={isYTD ? 'YTD view: delete disabled' : 'Delete'}
+                        >
+                          🗑️
+                        </button>
+                      </td>
+                    </tr>
+                  ))
                 ) : (
                   <tr>
-                    <td colSpan="15" style={{ border: '1px solid #cbd5e1', padding: '40px', textAlign: 'center', color: '#64748b', fontSize: '14px' }}>
+                    <td colSpan="13" style={{ border: '1px solid #cbd5e1', padding: '40px', textAlign: 'center', color: '#64748b', fontSize: '14px' }}>
                       No shipments for {selectedMonth}. {isYTD ? 'YTD aggregates all months.' : 'Click "Add Row" to start entering data.'}
                     </td>
                   </tr>
@@ -2140,7 +1713,7 @@ function App() {
           <div style={{ padding: '16px', background: '#f8fafc', borderTop: '1px solid #cbd5e1', fontSize: '12px', color: '#64748b', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px' }}>
             <p>
               <strong>Tips:</strong> {isYTD ? 'YTD rows are read-only • Use "Edit to month" + Add Row to add to a month • ' : ''}
-              Click column headers to sort • Click any cell to edit • Press{' '}
+              Click any cell to edit • Press{' '}
               <kbd style={{ padding: '2px 6px', background: 'white', border: '1px solid #cbd5e1', borderRadius: '3px', fontSize: '11px' }}>Enter</kbd>
               {' '}to move down • Press{' '}
               <kbd style={{ padding: '2px 6px', background: 'white', border: '1px solid #cbd5e1', borderRadius: '3px', fontSize: '11px' }}>Tab</kbd>
@@ -2150,357 +1723,7 @@ function App() {
             </p>
           </div>
         </div>
-
-        {/* STATS MOVED TO HERE - BELOW THE SHIPMENT DETAILS TABLE */}
-        {statusEnabled && (
-          <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '24px', marginBottom: '24px' }}>
-              <div ref={costPerCompanyRef} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px' }}>
-                <h3 style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '12px', color: '#334155' }}>Shipping Cost Per Company</h3>
-                {companySummary.length > 0 ? (
-                  <table style={{ width: '100%', fontSize: '12px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <th style={{ textAlign: 'left', padding: '4px', fontWeight: '600' }}>Company</th>
-                        <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Total Cost</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {companySummary.map((item, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '4px' }}>{item.company}</td>
-                          <td style={{ textAlign: 'right', padding: '4px' }}>
-                            ${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      ))}
-                      <tr style={{ fontWeight: 'bold', borderTop: '2px solid #cbd5e1' }}>
-                        <td style={{ padding: '4px' }}>Total</td>
-                        <td style={{ textAlign: 'right', padding: '4px' }}>
-                          ${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                ) : (
-                  <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', padding: '20px' }}>No data for {selectedMonth}</p>
-                )}
-              </div>
-
-              <div ref={shipmentCountRef} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px' }}>
-                <h3 style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '16px', color: '#334155' }}>Shipment Count by Company</h3>
-                {companySummary.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {companySummary.map((item, idx) => (
-                      <div key={idx}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '11px' }}>
-                          <span style={{ fontWeight: '600', color: '#475569' }}>{item.company}</span>
-                          <span style={{ color: '#64748b' }}>{item.count} shipments</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ flex: 1, height: '28px', background: '#f1f5f9', borderRadius: '6px', overflow: 'hidden' }}>
-                            <div
-                              style={{
-                                width: `${(item.count / maxCount) * 100}%`,
-                                height: '100%',
-                                background: chartColors[idx % chartColors.length],
-                                borderRadius: '6px',
-                                transition: 'width 0.3s ease',
-                                boxShadow: `0 0 10px ${chartColors[idx % chartColors.length]}40`,
-                              }}
-                            />
-                          </div>
-                          <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#334155', minWidth: '30px', textAlign: 'right' }}>{item.count}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', padding: '20px' }}>No data for {selectedMonth}</p>
-                )}
-              </div>
-            </div>
-
-            <div ref={revenueDistRef} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
-              <h3 style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '16px', color: '#334155' }}>Revenue Distribution by Company</h3>
-              {companySummary.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {companySummary.map((item, idx) => (
-                    <div key={idx}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '11px' }}>
-                        <span style={{ fontWeight: '600', color: '#475569' }}>{item.company}</span>
-                        <span style={{ color: '#64748b' }}>{totalCost > 0 ? ((item.total / totalCost) * 100).toFixed(1) : '0.0'}%</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ flex: 1, height: '32px', background: '#f1f5f9', borderRadius: '8px', overflow: 'hidden' }}>
-                          <div
-                            style={{
-                              width: `${totalCost > 0 ? (item.total / totalCost) * 100 : 0}%`,
-                              height: '100%',
-                              background: `linear-gradient(90deg, ${chartColors[idx % chartColors.length]}, ${chartColors[idx % chartColors.length]}dd)`,
-                              display: 'flex',
-                              alignItems: 'center',
-                              paddingRight: '12px',
-                              justifyContent: 'flex-end',
-                              color: 'white',
-                              fontSize: '11px',
-                              fontWeight: 'bold',
-                              transition: 'width 0.5s ease',
-                              borderRadius: '8px',
-                            }}
-                          >
-                            ${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', padding: '20px' }}>No data for {selectedMonth}</p>
-              )}
-            </div>
-
-            <div ref={clientStatsRef} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
-              <h3 style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '16px', color: '#334155' }}>Shipments by Client</h3>
-              {clientSummary.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <table style={{ width: '100%', fontSize: '12px' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                          <th style={{ textAlign: 'left', padding: '4px', fontWeight: '600' }}>Client</th>
-                          <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Shipments</th>
-                          <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Total Cost</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {clientSummary.map((item, idx) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? 'white' : '#f8fafc' }}>
-                            <td style={{ padding: '4px' }}>{item.client}</td>
-                            <td style={{ textAlign: 'right', padding: '4px' }}>{item.count}</td>
-                            <td style={{ textAlign: 'right', padding: '4px' }}>
-                              ${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div>
-                    <h4 style={{ fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: '#475569' }}>Shipment Count by Client</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {clientSummary.map((item, idx) => (
-                        <div key={idx}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', fontSize: '10px' }}>
-                            <span style={{ fontWeight: '600', color: '#475569' }}>{item.client}</span>
-                            <span style={{ color: '#64748b' }}>{item.count}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <div style={{ flex: 1, height: '20px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
-                              <div
-                                style={{
-                                  width: `${(item.count / maxClientCount) * 100}%`,
-                                  height: '100%',
-                                  background: chartColors[idx % chartColors.length],
-                                  borderRadius: '4px',
-                                  transition: 'width 0.3s ease',
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', padding: '20px' }}>No client data for {selectedMonth}</p>
-              )}
-            </div>
-
-            <div ref={agentStatsRef} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
-              <h3 style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '16px', color: '#334155' }}>Shipments by Agent</h3>
-              {agentSummary.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <table style={{ width: '100%', fontSize: '12px' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                          <th style={{ textAlign: 'left', padding: '4px', fontWeight: '600' }}>Agent</th>
-                          <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Shipments</th>
-                          <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Total Cost</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {agentSummary.map((item, idx) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? 'white' : '#f8fafc' }}>
-                            <td style={{ padding: '4px' }}>{item.agent}</td>
-                            <td style={{ textAlign: 'right', padding: '4px' }}>{item.count}</td>
-                            <td style={{ textAlign: 'right', padding: '4px' }}>
-                              ${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div>
-                    <h4 style={{ fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: '#475569' }}>Shipment Count by Agent</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {agentSummary.map((item, idx) => (
-                        <div key={idx}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', fontSize: '10px' }}>
-                            <span style={{ fontWeight: '600', color: '#475569' }}>{item.agent}</span>
-                            <span style={{ color: '#64748b' }}>{item.count}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <div style={{ flex: 1, height: '20px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
-                              <div
-                                style={{
-                                  width: `${(item.count / maxAgentCount) * 100}%`,
-                                  height: '100%',
-                                  background: chartColors[idx % chartColors.length],
-                                  borderRadius: '4px',
-                                  transition: 'width 0.3s ease',
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', padding: '20px' }}>No agent data for {selectedMonth}</p>
-              )}
-            </div>
-
-            <div ref={cityStatsRef} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
-              <h3 style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '16px', color: '#334155' }}>Shipments by City</h3>
-              {citySummary.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <table style={{ width: '100%', fontSize: '12px' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                          <th style={{ textAlign: 'left', padding: '4px', fontWeight: '600' }}>City</th>
-                          <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Shipments</th>
-                          <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Total Cost</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {citySummary.map((item, idx) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? 'white' : '#f8fafc' }}>
-                            <td style={{ padding: '4px' }}>{item.city}</td>
-                            <td style={{ textAlign: 'right', padding: '4px' }}>{item.count}</td>
-                            <td style={{ textAlign: 'right', padding: '4px' }}>
-                              ${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div>
-                    <h4 style={{ fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: '#475569' }}>Shipment Count by City</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {citySummary.map((item, idx) => (
-                        <div key={idx}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', fontSize: '10px' }}>
-                            <span style={{ fontWeight: '600', color: '#475569' }}>{item.city}</span>
-                            <span style={{ color: '#64748b' }}>{item.count}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <div style={{ flex: 1, height: '20px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
-                              <div
-                                style={{
-                                  width: `${(item.count / maxCityCount) * 100}%`,
-                                  height: '100%',
-                                  background: chartColors[idx % chartColors.length],
-                                  borderRadius: '4px',
-                                  transition: 'width 0.3s ease',
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', padding: '20px' }}>No city data for {selectedMonth}</p>
-              )}
-            </div>
-
-            <div ref={stateStatsRef} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
-              <h3 style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '16px', color: '#334155' }}>Shipments by State</h3>
-              {stateSummary.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <table style={{ width: '100%', fontSize: '12px' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                          <th style={{ textAlign: 'left', padding: '4px', fontWeight: '600' }}>State</th>
-                          <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Shipments</th>
-                          <th style={{ textAlign: 'right', padding: '4px', fontWeight: '600' }}>Total Cost</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {stateSummary.map((item, idx) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? 'white' : '#f8fafc' }}>
-                            <td style={{ padding: '4px' }}>{item.state}</td>
-                            <td style={{ textAlign: 'right', padding: '4px' }}>{item.count}</td>
-                            <td style={{ textAlign: 'right', padding: '4px' }}>
-                              ${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div>
-                    <h4 style={{ fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: '#475569' }}>Shipment Count by State</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {stateSummary.map((item, idx) => (
-                        <div key={idx}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', fontSize: '10px' }}>
-                            <span style={{ fontWeight: '600', color: '#475569' }}>{item.state}</span>
-                            <span style={{ color: '#64748b' }}>{item.count}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <div style={{ flex: 1, height: '20px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
-                              <div
-                                style={{
-                                  width: `${(item.count / maxStateCount) * 100}%`,
-                                  height: '100%',
-                                  background: chartColors[idx % chartColors.length],
-                                  borderRadius: '4px',
-                                  transition: 'width 0.3s ease',
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ fontSize: '13px', color: '#64748b', textAlign: 'center', padding: '20px' }}>No state data for {selectedMonth}</p>
-              )}
-            </div>
-          </>
-        )}
       </div>
-      <SingleAddModal />
-      <BulkAddModal />
     </div>
   );
 }
