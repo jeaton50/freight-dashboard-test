@@ -155,6 +155,7 @@ function App() {
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [showBulkOptions, setShowBulkOptions] = useState(false);
+  const [showQuickAdds, setShowQuickAdds] = useState(false);
   const fileInputRef = useRef(null);
   const jsonFileInputRef = useRef(null);
   const jsonClientsInputRef = useRef(null);
@@ -1914,29 +1915,54 @@ function App() {
     Analytics
   </button>
 
-  <button onClick={() => setSingleAddModal({ open: true, type: 'company', value: '' })} style={{ padding: '8px 12px', background: '#14b8a6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one company">
-    ⚡ Quick Add One Company
-  </button>
-
-            <button onClick={() => setSingleAddModal({ open: true, type: 'location', value: '' })} style={{ padding: '8px 12px', background: '#0891b2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one location">
-              ⚡ Quick Add One Location
+  <button 
+              onClick={() => setShowQuickAdds(!showQuickAdds)} 
+              style={{ 
+                padding: '8px 16px', 
+                background: showQuickAdds ? '#059669' : '#14b8a6', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '8px', 
+                fontSize: '13px', 
+                fontWeight: '600', 
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+              title={showQuickAdds ? 'Hide quick adds' : 'Show quick adds'}
+            >
+              <span>⚡</span>
+              {showQuickAdds ? 'Hide Quick Adds' : 'Quick Adds'}
             </button>
 
-            <button onClick={() => setSingleAddModal({ open: true, type: 'agent', value: '' })} style={{ padding: '8px 12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one agent">
-              ⚡ Quick Add One Agent
-            </button>
+            {showQuickAdds && (
+              <>
+                <button onClick={() => setSingleAddModal({ open: true, type: 'company', value: '' })} style={{ padding: '8px 12px', background: '#14b8a6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one company">
+                  ⚡ Company
+                </button>
 
-            <button onClick={() => setSingleAddModal({ open: true, type: 'city', value: '' })} style={{ padding: '8px 12px', background: '#a855f7', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one city">
-              ⚡ Quick Add One City
-            </button>
+                <button onClick={() => setSingleAddModal({ open: true, type: 'location', value: '' })} style={{ padding: '8px 12px', background: '#0891b2', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one location">
+                  ⚡ Location
+                </button>
 
-            <button onClick={() => setSingleAddModal({ open: true, type: 'state', value: '' })} style={{ padding: '8px 12px', background: '#9ca3af', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one state">
-              ⚡ Quick Add One State
-            </button>
+                <button onClick={() => setSingleAddModal({ open: true, type: 'agent', value: '' })} style={{ padding: '8px 12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one agent">
+                  ⚡ Agent
+                </button>
 
-            <button onClick={() => setSingleAddModal({ open: true, type: 'client', value: '' })} style={{ padding: '8px 12px', background: '#f472b6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one client">
-              ⚡ Quick Add One Client
-            </button>
+                <button onClick={() => setSingleAddModal({ open: true, type: 'city', value: '' })} style={{ padding: '8px 12px', background: '#a855f7', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one city">
+                  ⚡ City
+                </button>
+
+                <button onClick={() => setSingleAddModal({ open: true, type: 'state', value: '' })} style={{ padding: '8px 12px', background: '#9ca3af', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one state">
+                  ⚡ State
+                </button>
+
+                <button onClick={() => setSingleAddModal({ open: true, type: 'client', value: '' })} style={{ padding: '8px 12px', background: '#f472b6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }} title="Quick add one client">
+                  ⚡ Client
+                </button>
+              </>
+            )}
 
             <button 
               onClick={() => setShowBulkOptions(!showBulkOptions)} 
