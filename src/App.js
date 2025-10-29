@@ -1979,10 +1979,10 @@ function App() {
                 alignItems: 'center',
                 gap: '6px'
               }}
-              title={showBulkOptions ? 'Hide bulk options' : 'Show bulk options'}
+              title={showBulkOptions ? 'Hide bulk entry' : 'Show bulk entry'}
             >
               <span>{showBulkOptions ? '📂' : '📁'}</span>
-              {showBulkOptions ? 'Hide Bulk Options' : 'Show Bulk Options'}
+              {showBulkOptions ? 'Hide Bulk entry' : 'Show Bulk entry'}
             </button>
 
             {showBulkOptions && (
@@ -2538,6 +2538,18 @@ function App() {
 }
 
 export default App;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
