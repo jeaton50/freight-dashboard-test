@@ -150,8 +150,6 @@ function App() {
   const [filteredOptions, setFilteredOptions] = useState([]);
   const inputRef = useRef(null);
   const [dropdownRect, setDropdownRect] = useState(null);
-  const [lastSaved, setLastSaved] = useState(null);
-  const [isSaving, setIsSaving] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [showBulkOptions, setShowBulkOptions] = useState(false);
@@ -251,7 +249,6 @@ function App() {
     if (isYTD || shipments.length === 0) return;
     let timeoutId;
     const saveData = async () => {
-      setIsSaving(true);
       try {
         await setDoc(monthDocRef(selectedYear, selectedMonth), {
           shipments,
@@ -259,13 +256,8 @@ function App() {
           month: selectedMonth,
           year: selectedYear,
         });
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-        setLastSaved(timeStr);
       } catch (err) {
         console.error('Auto-save failed:', err);
-      } finally {
-        setIsSaving(false);
       }
     };
     timeoutId = setTimeout(saveData, 1000);
