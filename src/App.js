@@ -162,6 +162,7 @@ function App() {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [statusEnabled, setStatusEnabled] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'saving', 'error'
 
   const costPerCompanyRef = useRef(null);
   const clientStatsRef = useRef(null);
@@ -245,11 +246,25 @@ function App() {
     }
   }, [selectedYear, selectedMonth, isYTD]);
 
-  // Auto-save when shipments change
+  // Auto-save only when NEW entries are added (not on edits)
+  const previousLengthRef = useRef(shipments.length);
+  
   useEffect(() => {
-    if (isYTD || shipments.length === 0) return;
+    if (isYTD) return;
+    
+    const currentLength = shipments.length;
+    const previousLength = previousLengthRef.current;
+    const isNewEntry = currentLength > previousLength;
+    
+    // Only auto-save if a new entry was added
+    if (!isNewEntry) {
+      previousLengthRef.current = currentLength;
+      return;
+    }
+    
     let timeoutId;
     const saveData = async () => {
+      setSaveStatus('saving');
       try {
         await setDoc(monthDocRef(selectedYear, selectedMonth), {
           shipments,
@@ -257,13 +272,87 @@ function App() {
           month: selectedMonth,
           year: selectedYear,
         });
+        console.log('✅ Auto-saved NEW entry:', selectedMonth, selectedYear, '|', shipments.length, 'rows');
+        setSaveStatus('saved');
       } catch (err) {
-        console.error('Auto-save failed:', err);
+        console.error('❌ Auto-save failed:', err);
+        setSaveStatus('error');
+        if (err.code === 'resource-exhausted') {
+          alert('⚠️ Firebase quota exceeded. Your changes are saved locally but may not sync. Please try again later or upgrade your Firebase plan.');
+        }
       }
     };
-    timeoutId = setTimeout(saveData, 1000);
+    
+    // Save immediately when new entry added (no delay)
+    timeoutId = setTimeout(saveData, 500);
+    
+    previousLengthRef.current = currentLength;
     return () => clearTimeout(timeoutId);
   }, [shipments, selectedYear, selectedMonth, isYTD]);
+
+  // Manual save function
+  const handleManualSave = async () => {
+    if (isYTD) {
+      alert('Cannot manually save in YTD view. Please switch to a specific month.');
+      return;
+    }
+    
+    setSaveStatus('saving');
+    try {
+      await setDoc(monthDocRef(selectedYear, selectedMonth), {
+        shipments,
+        lastModified: new Date().toISOString(),
+        month: selectedMonth,
+        year: selectedYear,
+      });
+      console.log('✅ Manual save:', selectedMonth, selectedYear, '|', shipments.length, 'rows');
+      setSaveStatus('saved');
+      alert('✅ Data saved successfully!');
+    } catch (err) {
+      console.error('❌ Manual save failed:', err);
+      setSaveStatus('error');
+      if (err.code === 'resource-exhausted') {
+        alert('⚠️ Firebase quota exceeded. Please try again later or upgrade your Firebase plan.');
+      } else {
+        alert('❌ Save failed: ' + err.message);
+      }
+    }
+  };
+
+  // Save immediately when switching months/years to prevent data loss
+  const previousMonthRef = useRef(selectedMonth);
+  const previousYearRef = useRef(selectedYear);
+  const previousShipmentsRef = useRef(shipments);
+
+  useEffect(() => {
+    const monthChanged = previousMonthRef.current !== selectedMonth;
+    const yearChanged = previousYearRef.current !== selectedYear;
+    
+    if ((monthChanged || yearChanged) && !isYTD && previousShipmentsRef.current.length > 0) {
+      // Save the previous month's data before switching
+      const savePrevious = async () => {
+        try {
+          await setDoc(monthDocRef(previousYearRef.current, previousMonthRef.current), {
+            shipments: previousShipmentsRef.current,
+            lastModified: new Date().toISOString(),
+            month: previousMonthRef.current,
+            year: previousYearRef.current,
+          });
+          console.log('✅ Saved before switching:', previousMonthRef.current, previousYearRef.current);
+        } catch (err) {
+          console.error('❌ Save before switch failed:', err);
+          if (err.code === 'resource-exhausted') {
+            console.warn('⚠️ Quota exceeded during month switch - data may not be saved');
+          }
+        }
+      };
+      savePrevious();
+    }
+
+    previousMonthRef.current = selectedMonth;
+    previousYearRef.current = selectedYear;
+    previousShipmentsRef.current = shipments;
+  }, [selectedMonth, selectedYear, shipments, isYTD]);
 
   const handleMonthChange = (newMonth) => {
     setEditingCell(null);
@@ -1762,6 +1851,23 @@ if (statsWereHidden) {
             <p style={{ fontSize: '14px', color: '#64748b' }}>
               {selectedMonth} {selectedYear}
               {isYTD && <span style={{ fontSize: '11px', color: '#475569', marginLeft: '8px' }}>YTD view • rows are read-only</span>}
+              {!isYTD && (
+                <span style={{ 
+                  fontSize: '11px', 
+                  marginLeft: '8px',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  fontWeight: '600',
+                  background: saveStatus === 'saved' ? '#10b981' : saveStatus === 'saving' ? '#f59e0b' : '#ef4444',
+                  color: 'white'
+                }}
+                title={saveStatus === 'saved' ? 'Auto-saves new entries only. Click "Save Now" after edits.' : ''}
+                >
+                  {saveStatus === 'saved' && '✓ New entries auto-save'}
+                  {saveStatus === 'saving' && '💾 Saving...'}
+                  {saveStatus === 'error' && '⚠️ Save Error'}
+                </span>
+              )}
               <span style={{ fontSize: '11px', color: '#3b82f6', marginLeft: '8px' }}>🌐 Multi-user enabled</span>
               <span style={{ 
                 fontSize: '11px', 
@@ -1780,6 +1886,27 @@ if (statsWereHidden) {
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={handleLogout} style={{ padding: '8px 16px', background: '#64748b', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
               🔒 Logout
+            </button>
+
+            <button 
+              onClick={handleManualSave} 
+              disabled={isYTD || saveStatus === 'saving'}
+              style={{ 
+                padding: '8px 16px', 
+                background: isYTD || saveStatus === 'saving' ? '#9ca3af' : '#10b981', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '8px', 
+                fontSize: '13px', 
+                fontWeight: '600', 
+                cursor: isYTD || saveStatus === 'saving' ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+              title={isYTD ? 'Cannot save in YTD view' : 'Save after editing existing rows (new rows auto-save)'}
+            >
+              💾 Save Now
             </button>
 
             <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
